@@ -1,0 +1,18 @@
+networks:
+  rest_bridge:
+
+services:
+  rest:
+    image: apache/iceberg-rest-fixture
+    environment:
+      - AWS_ACCESS_KEY_ID=your_aws_access_key_id
+      - AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+      - AWS_REGION=your_aws_region
+      - CATALOG_CATALOG__IMPL=org.apache.iceberg.jdbc.JdbcCatalog
+      - CATALOG_URI=jdbc:sqlite:file:/tmp/iceberg_rest_mode=memory
+      - CATALOG_WAREHOUSE=s3://your_bucket/your_path
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+    networks:
+      rest_bridge:
+    ports:
+      - "8181:8181" 
