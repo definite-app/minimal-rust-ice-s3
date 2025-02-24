@@ -4,16 +4,39 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iceberg = { path = "../crates/iceberg", workspace = true }
-iceberg-catalog-memory = { path = "../crates/catalog/memory", workspace = true }
-iceberg-catalog-sql = { path = "../crates/catalog/sql" }
-iceberg-catalog-rest = { path = "../crates/catalog/rest" }
-iceberg-datafusion = { path = "../crates/integrations/datafusion" }
-datafusion = "45"
-tokio = { version = "1.0", features = ["full"] }
-dotenv = "0.15"
-uuid = { version = "1.7.0", features = ["v4", "v7"] }
-parquet = "54.2.0"
-arrow = "54.2.0"
 anyhow = "1.0"
-sqlx = { version = "0.8.1", features = ["sqlite", "runtime-tokio", "any", "migrate"] } 
+duckdb = { version = "0.9.1", features = ["extensions-full"] }
+iceberg = { git = "https://github.com/apache/iceberg-rust.git" }
+iceberg-catalog-rest = { git = "https://github.com/apache/iceberg-rust.git" }
+iceberg-datafusion = { git = "https://github.com/apache/iceberg-rust.git" }
+datafusion = "45"
+parquet = "54.2.0"
+uuid = { version = "1.7.0", features = ["v4"] }
+arrow = "54.2.0"
+chrono = { version = "0.4.34", features = ["unstable-locales"] }
+tokio = { version = "1.0", features = ["full"] }
+dotenv = "0.15.0"
+
+[[bin]]
+name = "mjr"
+path = "src/main.rs"
+
+[[bin]]
+name = "read_table"
+path = "src/bin/read_table.rs"
+
+[[bin]]
+name = "list_tables"
+path = "src/bin/list_tables.rs"
+
+[[bin]]
+name = "read_custom_table"
+path = "src/bin/read_custom_table.rs"
+
+[[bin]]
+name = "run_query"
+path = "src/bin/run_query.rs"
+
+[[bin]]
+name = "run_custom_query"
+path = "src/bin/run_custom_query.rs" 

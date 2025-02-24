@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use arrow::array::{Int32Array, StringArray};
-use arrow::record_batch::RecordBatch;
+use arrow::{
+    array::{Int32Array, StringArray},
+    record_batch::RecordBatch,
+    datatypes::SchemaRef,
+};
 use parquet::file::properties::WriterProperties;
 use iceberg::{
     io::FileIOBuilder,
     spec::{
-        DataFileFormat, NestedField, PrimitiveType, Schema, Type,
+        DataFileFormat, NestedField, PrimitiveType, Schema, Type, Transform, UnboundPartitionSpec,
+        Struct, Literal, PrimitiveLiteral,
     },
     Catalog, NamespaceIdent, TableIdent, TableCreation,
     arrow::schema_to_arrow_schema,
@@ -24,6 +28,8 @@ use iceberg_catalog_rest::{RestCatalog, RestCatalogConfig};
 use std::env;
 use dotenv::dotenv;
 use uuid::Uuid;
+
+mod duckdb_tpch;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -47,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     properties.insert("access-key-id".to_string(), access_key);
     properties.insert("secret-access-key".to_string(), secret_key);
     properties.insert("region".to_string(), region.clone());
-    let file_io = FileIOBuilder::new("s3").with_props(properties).build()?;
+    let _file_io = FileIOBuilder::new("s3").with_props(properties).build()?;
 
     // Create catalog
     let mut catalog_props = HashMap::new();
@@ -81,14 +87,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .build()?;
 
+    // Create partition spec
+    let unbound_partition_spec = UnboundPartitionSpec::builder()
+        .add_partition_field(2, "name", Transform::Identity)?
+        .build();
+
+    let partition_spec = unbound_partition_spec.bind(schema.clone())?;
+
     let mut properties = HashMap::new();
     properties.insert("write.format.default".to_string(), "parquet".to_string());
     properties.insert("write.metadata.compression-codec".to_string(), "none".to_string());
 
-    // Create the table
+    // Create the table with partition spec
     let creation = TableCreation::builder()
         .name(table_ident.name().to_string())
         .schema(schema.clone())
+        .partition_spec(partition_spec)
         .properties(properties)
         .build();
 
@@ -97,44 +111,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start a transaction
     let mut transaction = Transaction::new(&table);
 
-    // Create sample data
-    let id_array = Int32Array::from(vec![1, 2, 3]);
-    let name_array = StringArray::from(vec!["Alice", "Bob", "Charlie"]);
-    let arrow_schema = Arc::new(schema_to_arrow_schema(&schema)?);
-    let batch = RecordBatch::try_new(
-        arrow_schema.clone(),
-        vec![Arc::new(id_array), Arc::new(name_array)],
-    )?;
+    // Sample data and partitions
+    let data = vec![
+        ("Alice", 1),
+        ("Bob", 2),
+        ("Charlie", 3),
+    ];
 
-    // Set up the Parquet writer
-    let location_gen = DefaultLocationGenerator::new(table.metadata().clone())?;
-    let file_name_gen = DefaultFileNameGenerator::new("data".to_string(), None, DataFileFormat::Parquet);
-    
-    let parquet_writer = ParquetWriterBuilder::new(
-        WriterProperties::builder().build(),
-        table.metadata().current_schema().clone(),
-        table.file_io().clone(),
-        location_gen,
-        file_name_gen,
-    );
+    // Collect all data files
+    let mut all_data_files = vec![];
 
-    // Create a data writer
-    let mut data_writer = DataFileWriterBuilder::new(parquet_writer, None)
-        .build()
-        .await?;
+    // Write each partition separately
+    for (name, id) in data {
+        // Create data for this partition
+        let id_array = Int32Array::from(vec![id]);
+        let name_array = StringArray::from(vec![name]);
+        let arrow_schema = schema_to_arrow_schema(&schema)?;
+        let batch = RecordBatch::try_new(
+            SchemaRef::new(arrow_schema),
+            vec![Arc::new(id_array), Arc::new(name_array)],
+        )?;
 
-    // Write the data
-    data_writer.write(batch).await?;
-    let data_files = data_writer.close().await?;
+        // Set up the Parquet writer
+        let location_gen = DefaultLocationGenerator::new(table.metadata().clone())?;
+        let file_name_gen = DefaultFileNameGenerator::new(format!("data_{}", name), None, DataFileFormat::Parquet);
+        
+        let parquet_writer = ParquetWriterBuilder::new(
+            WriterProperties::builder().build(),
+            table.metadata().current_schema().clone(),
+            table.file_io().clone(),
+            location_gen,
+            file_name_gen,
+        );
 
-    // Add the data files to the transaction
+        // Create partition values
+        let partition_values = Struct::from_iter([Some(Literal::Primitive(
+            PrimitiveLiteral::String(name.to_string())
+        ))]);
+
+        // Create a data writer with partition values
+        let mut data_writer = DataFileWriterBuilder::new(parquet_writer, Some(partition_values))
+            .build()
+            .await?;
+
+        // Write the data
+        data_writer.write(batch).await?;
+        let data_files = data_writer.close().await?;
+        all_data_files.extend(data_files);
+    }
+
+    // Add all data files in a single append
     let mut fast_append = transaction.fast_append(Some(Uuid::new_v4()), vec![])?;
-    fast_append.add_data_files(data_files)?;
+    fast_append.add_data_files(all_data_files)?;
     transaction = fast_append.apply().await?;
 
     // Commit the transaction
     transaction.commit(&catalog).await?;
 
-    println!("Successfully created table with sample data");
+    println!("Successfully created partitioned table with sample data");
+    
+    // Create TPCH tables
+    let warehouse_path = format!("s3://{}/{}/tpch", bucket, path);
+    duckdb_tpch::create_tpch_tables(&catalog, &warehouse_path, 0.1).await?;
+    
+    println!("Successfully created TPCH tables");
     Ok(())
 }
