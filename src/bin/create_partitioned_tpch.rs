@@ -13,7 +13,6 @@ use iceberg::{
         Struct, Literal, PrimitiveLiteral,
     },
     Catalog, NamespaceIdent, TableIdent, TableCreation,
-    arrow::schema_to_arrow_schema,
     writer::{
         file_writer::{
             location_generator::{DefaultLocationGenerator, DefaultFileNameGenerator},
@@ -62,9 +61,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build();
     let catalog = RestCatalog::new(catalog_config);
 
+    // Create a new catalog for DataFusion
+    let mut catalog_props = HashMap::new();
+    catalog_props.insert("warehouse".to_string(), format!("s3://{}/{}", bucket, path));
+    let catalog_config = RestCatalogConfig::builder()
+        .uri("http://localhost:8181".to_string())
+        .props(catalog_props)
+        .build();
+    let df_catalog = RestCatalog::new(catalog_config);
+
     // Create DataFusion session to read from existing tables
     let state = SessionStateBuilder::new().with_default_features().build();
-    let catalog_provider = Arc::new(IcebergCatalogProvider::try_new(Arc::new(catalog.clone())).await?);
+    let catalog_provider = Arc::new(IcebergCatalogProvider::try_new(Arc::new(df_catalog)).await?);
     let ctx = SessionContext::new_with_state(state);
     ctx.register_catalog("my_catalog", catalog_provider);
 
@@ -194,10 +202,6 @@ async fn create_partitioned_lineitem(
         }
         
         println!("Processing partition for month {}", month_key);
-        
-        // Extract year and month
-        let year = month_key / 100;
-        let month = month_key % 100;
         
         // Create partition values
         let partition_values = Struct::from_iter([Some(Literal::Primitive(
