@@ -39,4 +39,8 @@ path = "src/bin/run_query.rs"
 
 [[bin]]
 name = "run_custom_query"
-path = "src/bin/run_custom_query.rs" 
+path = "src/bin/run_custom_query.rs"
+
+[[bin]]
+name = "create_partitioned_tpch"
+path = "src/bin/create_partitioned_tpch.rs" 

@@ -142,6 +142,42 @@ OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT
 OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT c.c_name, n.n_name as nation, r.r_name as region, COUNT(o.o_orderkey) as order_count, SUM(o.o_totalprice) as total_spent FROM my_catalog.tpch.customer c JOIN my_catalog.tpch.orders o ON c.c_custkey = o.o_custkey JOIN my_catalog.tpch.nation n ON c.c_nationkey = n.n_nationkey JOIN my_catalog.tpch.region r ON n.n_regionkey = r.r_regionkey GROUP BY c.c_name, n.n_name, r.r_name ORDER BY total_spent DESC LIMIT 10"
 ```
 
+## Partitioned Tables
+
+The project includes functionality to create partitioned versions of the TPC-H tables for improved query performance:
+
+```bash
+OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin create_partitioned_tpch
+```
+
+This will:
+- Create a new namespace called `tpch_partitioned`
+- Create a partitioned version of the `lineitem` table (partitioned by month of shipdate)
+- Create a partitioned version of the `orders` table (partitioned by year of orderdate)
+- Copy data from the original tables to the partitioned versions
+
+You can query the partitioned tables using:
+
+```bash
+OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT * FROM my_catalog.tpch_partitioned.lineitem LIMIT 10"
+```
+
+```bash
+OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT * FROM my_catalog.tpch_partitioned.orders LIMIT 10"
+```
+
+Partitioning improves query performance when filtering on the partition columns:
+
+```bash
+# Query using partition pruning on lineitem
+OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT COUNT(*) FROM my_catalog.tpch_partitioned.lineitem WHERE l_shipdate BETWEEN DATE '1992-01-01' AND DATE '1992-12-31'"
+```
+
+```bash
+# Query using partition pruning on orders
+OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT COUNT(*) FROM my_catalog.tpch_partitioned.orders WHERE o_orderdate >= DATE '1993-01-01'"
+```
+
 ## Project Structure
 
 - `src/main.rs` - Main program for writing data
@@ -150,6 +186,7 @@ OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT
 - `src/bin/read_custom_table.rs` - Example of reading data from a specific table
 - `src/bin/run_query.rs` - Example of running a predefined query
 - `src/bin/run_custom_query.rs` - Example of running custom SQL queries
+- `src/bin/create_partitioned_tpch.rs` - Example of creating partitioned TPC-H tables
 - `docker-compose.yml` - REST catalog server configuration
 - `.env` - Environment variables (not tracked in git)
 
