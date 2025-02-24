@@ -133,7 +133,7 @@ async fn create_partitioned_lineitem(
 
     // Create partition spec - partition by month of shipdate
     let unbound_partition_spec = UnboundPartitionSpec::builder()
-        .add_partition_field(11, "l_shipdate", Transform::Month)?
+        .add_partition_field(11, "shipdate_month", Transform::Month)?
         .build();
 
     let partition_spec = unbound_partition_spec.bind(schema.clone())?;
@@ -285,7 +285,7 @@ async fn create_partitioned_orders(
 
     // Create partition spec - partition by year of orderdate
     let unbound_partition_spec = UnboundPartitionSpec::builder()
-        .add_partition_field(5, "o_orderdate", Transform::Year)?
+        .add_partition_field(5, "orderdate_year", Transform::Year)?
         .build();
 
     let partition_spec = unbound_partition_spec.bind(schema.clone())?;
