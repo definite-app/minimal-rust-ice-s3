@@ -154,27 +154,31 @@ This will:
 - Create a new namespace called `tpch_partitioned`
 - Create a partitioned version of the `lineitem` table (partitioned by month of shipdate)
 - Create a partitioned version of the `orders` table (partitioned by year of orderdate)
-- Copy data from the original tables to the partitioned versions
 
-You can query the partitioned tables using:
+Note: The tables are created without data. To populate them with data, you would need to implement a separate process to:
+1. Read data from the original tables
+2. Convert data types as needed (e.g., Int32 to Int64 for key fields)
+3. Write the data to the partitioned tables with appropriate partition values
+
+You can verify the table structures using:
 
 ```bash
-OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT * FROM my_catalog.tpch_partitioned.lineitem LIMIT 10"
+OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "DESCRIBE my_catalog.tpch_partitioned.lineitem"
 ```
 
 ```bash
-OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT * FROM my_catalog.tpch_partitioned.orders LIMIT 10"
+OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "DESCRIBE my_catalog.tpch_partitioned.orders"
 ```
 
-Partitioning improves query performance when filtering on the partition columns:
+Once populated, partitioning would improve query performance when filtering on the partition columns:
 
 ```bash
-# Query using partition pruning on lineitem
+# Query using partition pruning on lineitem (example for when data is populated)
 OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT COUNT(*) FROM my_catalog.tpch_partitioned.lineitem WHERE l_shipdate BETWEEN DATE '1992-01-01' AND DATE '1992-12-31'"
 ```
 
 ```bash
-# Query using partition pruning on orders
+# Query using partition pruning on orders (example for when data is populated)
 OPENSSL_DIR=/opt/homebrew/opt/openssl@3 cargo run --bin run_custom_query "SELECT COUNT(*) FROM my_catalog.tpch_partitioned.orders WHERE o_orderdate >= DATE '1993-01-01'"
 ```
 

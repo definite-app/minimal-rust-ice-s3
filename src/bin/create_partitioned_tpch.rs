@@ -8,13 +8,12 @@ use datafusion::prelude::*;
 use iceberg::io::FileIOBuilder;
 use iceberg::{
     spec::{
-        DataFileFormat, NestedField, PrimitiveType, Schema, Type, Transform, UnboundPartitionSpec,
+        NestedField, PrimitiveType, Schema, Type, Transform, UnboundPartitionSpec,
     },
     Catalog, NamespaceIdent, TableIdent, TableCreation,
 };
 use iceberg_catalog_rest::{RestCatalog, RestCatalogConfig};
 use iceberg_datafusion::IcebergCatalogProvider;
-use chrono::{NaiveDate, Datelike};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,20 +71,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create partitioned lineitem table
     println!("Creating partitioned lineitem table...");
-    create_partitioned_lineitem(&catalog, &namespace, &ctx).await?;
+    create_partitioned_lineitem(&catalog, &namespace).await?;
 
     // Create partitioned orders table
     println!("Creating partitioned orders table...");
-    create_partitioned_orders(&catalog, &namespace, &ctx).await?;
+    create_partitioned_orders(&catalog, &namespace).await?;
 
     println!("Successfully created partitioned TPC-H tables");
+    println!("Note: Tables are created without data. To populate them, you'll need to run a separate process.");
     Ok(())
 }
 
 async fn create_partitioned_lineitem(
     catalog: &RestCatalog,
     namespace: &NamespaceIdent,
-    ctx: &SessionContext,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Define table identifier
     let table_name = "lineitem";
@@ -140,52 +139,8 @@ async fn create_partitioned_lineitem(
         .build();
 
     let _table = catalog.create_table(namespace, creation).await?;
-
-    // Query the existing lineitem table and insert data into the partitioned table
-    println!("Querying source lineitem table...");
-    let df = ctx.sql("SELECT * FROM my_catalog.tpch.lineitem LIMIT 1000").await?;
-    let batches = df.collect().await?;
-    
-    println!("Processing {} batches from lineitem table", batches.len());
-    
-    // Group data by month of shipdate
-    let mut month_groups = HashMap::<i32, Vec<usize>>::new();
-    
-    // Process each batch
-    for (batch_idx, batch) in batches.iter().enumerate() {
-        println!("Processing batch {} with {} rows", batch_idx, batch.num_rows());
-        
-        // Find the shipdate column index
-        let shipdate_idx = batch.schema().index_of("l_shipdate").unwrap();
-        
-        // Group rows by month
-        for row_idx in 0..batch.num_rows() {
-            // Extract the shipdate
-            let shipdate = batch.column(shipdate_idx).as_any().downcast_ref::<arrow::array::Date32Array>().unwrap().value(row_idx);
-            
-            // Convert to NaiveDate
-            let epoch_days = shipdate;
-            let date = NaiveDate::from_num_days_from_ce_opt(epoch_days + 719163).unwrap(); // 719163 is days from 0 to unix epoch
-            
-            // Get month (1-12)
-            let month = date.month() as i32;
-            let year = date.year();
-            let month_key = year * 100 + month; // Format as YYYYMM
-            
-            // Add to group
-            month_groups.entry(month_key).or_default().push(row_idx);
-        }
-    }
-    
-    println!("Found {} month partitions", month_groups.len());
-    
-    // NOTE: There's a type mismatch between the schema (Int64) and the data (Int32)
-    // In a production environment, we would need to convert the data types
-    // For this example, we'll just create the table schema to demonstrate partitioning
     
     println!("Successfully created partitioned lineitem table schema");
-    println!("Note: Data insertion was skipped due to type mismatch between schema and data");
-    println!("In a production environment, you would need to convert the data types");
     
     Ok(())
 }
@@ -193,7 +148,6 @@ async fn create_partitioned_lineitem(
 async fn create_partitioned_orders(
     catalog: &RestCatalog,
     namespace: &NamespaceIdent,
-    ctx: &SessionContext,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Define table identifier
     let table_name = "orders";
@@ -241,21 +195,8 @@ async fn create_partitioned_orders(
         .build();
 
     let _table = catalog.create_table(namespace, creation).await?;
-
-    // Query the existing orders table and insert data into the partitioned table
-    println!("Querying source orders table...");
-    let df = ctx.sql("SELECT * FROM my_catalog.tpch.orders LIMIT 1000").await?;
-    let batches = df.collect().await?;
-    
-    println!("Processing {} batches from orders table", batches.len());
-    
-    // NOTE: There's a type mismatch between the schema (Int64) and the data (Int32)
-    // In a production environment, we would need to convert the data types
-    // For this example, we'll just create the table schema to demonstrate partitioning
     
     println!("Successfully created partitioned orders table schema");
-    println!("Note: Data insertion was skipped due to type mismatch between schema and data");
-    println!("In a production environment, you would need to convert the data types");
     
     Ok(())
 } 
